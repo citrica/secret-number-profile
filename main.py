@@ -3,6 +3,8 @@ import uuid
 import hashlib
 
 from flask import Flask, render_template, request, redirect, url_for, make_response
+from sqlalchemy.sql.functions import user
+
 from models import User, db
 
 app = Flask(__name__)
@@ -115,7 +117,20 @@ def profile_edit():
     elif request.method == "POST":
         name = request.form.get("profile-name")
         email = request.form.get("profile-email")
+        old_password = request.form.get("old-password")
+        new_password = request.form.get("new-password")
 
+        if old_password and new_password:
+            hashed_old_password = hashlib.sha256(old_password.encode()).hexdigest()  # hash the old password
+            hashed_new_password = hashlib.sha256(new_password.encode()).hexdigest()
+
+            # check if old password hash is equal to the password hash in the database
+            if hashed_old_password == user.password:
+                # if yes, save the new password hash in the database
+                user.password = hashed_new_password
+            else:
+                # if not, return error
+                return "Wrong (old) password! Go back and try again."
         # update the user object
         user.name = name
         user.email = email
@@ -140,7 +155,9 @@ def profile_delete():
         else:
             return redirect(url_for("index"))
     elif request.method == "POST":
-        db.delete(user)
+        # fake delete the user (mark the deleted field as True)
+        user.deleted = True
+        db.add(user)
         db.commit()
 
         return redirect(url_for("index"))
@@ -148,7 +165,7 @@ def profile_delete():
 
 @app.route("/users", methods=["GET"])
 def all_users():
-    users = db.query(User).all()
+    users = db.query(User).filter_by(deleted=False).all()
 
     return render_template("users.html", users=users)
 
